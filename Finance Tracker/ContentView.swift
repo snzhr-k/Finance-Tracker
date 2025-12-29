@@ -17,7 +17,7 @@ struct ContentView: View {
                 }
                 .onDelete(perform: deleteItems)
             }
-            .navigationSplitViewColumnWidth(min: 180, ideal: 200)
+            //.navigationSplitViewColumnWidth(min: 180, ideal: 200)
             .toolbar {
                 ToolbarItem {
                     Button(action: addItem) {

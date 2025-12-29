@@ -5,13 +5,13 @@ import SwiftUI
 struct AccountView: View {
     @Environment(\.modelContext) private var modelContext
     @Query private var accounts: [Account]
-    
+    @State var presentSheet: Bool = false
     
     
     var body: some View {
         VStack{
             if accounts.isEmpty {
-                EmptyAccountView()
+                Text("You don't have accounts yet") //TODO: add text styles
             }
             else {
                 List{
@@ -22,6 +22,23 @@ struct AccountView: View {
                             Text(acc.name)
                         }
                     }.onDelete(perform: deleteAccount)
+                    
+                    
+                    Button{
+                        presentSheet = true
+                    } label: {
+                        Image(systemName: "plus.circle")
+                        Text("Create")
+
+                    }.buttonStyle(.borderedProminent)
+                        .sheet(isPresented: $presentSheet, content: {
+                            CreateAccountView(presentSheet: $presentSheet).frame(
+                                minWidth: 500,
+                                maxWidth: .infinity,
+                                minHeight: 600,
+                                maxHeight: .infinity
+                            )
+                        })
                 }
             }
         }
@@ -53,10 +70,24 @@ struct CreateAccountView : View {
         return (!name.isEmpty && amount >= 0)
     }
     
+    var errorMessage: String? {
+        if (accountName.isEmpty) {return "Invalid account name"}
+        else if (currentAmount < 0) {return "Invalid amount of initial deposit"}
+        else {return nil}
+    }
+    var isFormValid: Bool { return (errorMessage?.isEmpty) != nil}
+    
+    @State var didEditName: Bool = false
+    @State var didEditAmount: Bool = false
+    
     var body: some View {
         Form{
             Section {
-                TextField("Account Name", text: $accountName)
+                TextField("Account Name", text: $accountName).onSubmit {
+                    didEditName = true
+
+                    
+                }
                 Picker("Currency Code", selection: $currencyCode) {
                     ForEach(currencyCodes, id: \.self) {
                         Text($0)
@@ -88,8 +119,9 @@ struct CreateAccountView : View {
                     Spacer()
                     
                     Button {
-                        if(validateAccountCreation(accountName, transfer: currentAmount)){
-                            var newAccount: Account = Account(name: accountName, currencyCode: currencyCode, initialDeposit: currentAmount)
+                        //if(validateAccountCreation(accountName, transfer: currentAmount)){ //TODO: use computed property instead of calling function every time
+                        if (isFormValid){
+                            let newAccount: Account = Account(name: accountName, currencyCode: currencyCode, initialDeposit: currentAmount)
                             modelContext.insert(newAccount)
                             presentSheet = false
                         }
@@ -99,7 +131,8 @@ struct CreateAccountView : View {
                     }
                     .buttonStyle(.bordered)
                     .foregroundColor(.green)
-                    .disabled(!validateAccountCreation(accountName, transfer: currentAmount))
+                    .disabled(!isFormValid)
+                    //.disabled(!validateAccountCreation(accountName, transfer: currentAmount)) //TODO: use computed property instead of calling function every time
                 }.padding()
             }
         }.formStyle(.grouped)
