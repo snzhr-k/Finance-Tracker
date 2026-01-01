@@ -6,29 +6,79 @@ struct AccountView: View {
     @Environment(\.modelContext) private var modelContext
     @Query private var accounts: [Account]
     @State var presentSheet: Bool = false
+    @State private var selectedAccount: Account?
     
+    @ViewBuilder
+    private var detailView: some View {
+        if let account = selectedAccount {
+            AccountDetailView(account: account)
+        } else {
+            ContentUnavailableView(
+                "No Account Selected",
+                systemImage: "creditcard",
+                description: Text("Select an account from the sidebar")
+            )
+        }
+    }
     
     var body: some View {
-        VStack{
-            if accounts.isEmpty {
-                Text("You don't have accounts yet") //TODO: add text styles
+//        VStack{
+//            if accounts.isEmpty {
+//                Text("You don't have accounts yet") //TODO: add text styles
+//            }
+//            else {
+//                List{
+//                    ForEach(accounts) { acc in
+//                        Button{
+//                            print(acc.name)
+//                        } label: {
+//                            Text(acc.name)
+//                        }
+//                    }.onDelete(perform: deleteAccount)
+//                    
+//                    
+//                    Button{
+//                        presentSheet = true
+//                    } label: {
+//                        Image(systemName: "plus.circle")
+//                        Text("Create")
+//
+//                    }.buttonStyle(.borderedProminent)
+//                        .sheet(isPresented: $presentSheet, content: {
+//                            CreateAccountView(presentSheet: $presentSheet).frame(
+//                                minWidth: 500,
+//                                maxWidth: .infinity,
+//                                minHeight: 600,
+//                                maxHeight: .infinity
+//                            )
+//                        })
+//                }
+//            }
+//        }
+        
+        
+        
+        
+        
+        NavigationSplitView{
+            List{
+                ForEach(accounts) { acc in
+                    Button{
+                        print(acc.name)
+                        selectedAccount = acc
+                    } label: {
+                        Text(acc.name)
+                    }
+                }.onDelete(perform: deleteAccount)
             }
-            else {
-                List{
-                    ForEach(accounts) { acc in
-                        Button{
-                            print(acc.name)
-                        } label: {
-                            Text(acc.name)
-                        }
-                    }.onDelete(perform: deleteAccount)
-                    
-                    
+            .navigationSplitViewColumnWidth(min: 180, ideal: 200)
+            .toolbar{
+                ToolbarItem{
                     Button{
                         presentSheet = true
                     } label: {
                         Image(systemName: "plus.circle")
-                        Text("Create")
+                        //Text("Create") //NOTE: text of the buttons cannot be displayed in toolbar
 
                     }.buttonStyle(.borderedProminent)
                         .sheet(isPresented: $presentSheet, content: {
@@ -36,10 +86,18 @@ struct AccountView: View {
                                 minWidth: 500,
                                 maxWidth: .infinity,
                                 minHeight: 600,
-                                maxHeight: .infinity
-                            )
-                        })
+                                maxHeight: .infinity)})
                 }
+        }
+        } detail: {
+            if let account = selectedAccount {
+                AccountDetailView(account: account)
+            } else {
+                ContentUnavailableView(
+                    "No Account Selected",
+                    systemImage: "creditcard",
+                    description: Text("Select an account from the sidebar")
+                )
             }
         }
     }
@@ -51,6 +109,17 @@ struct AccountView: View {
         }
     }
     
+}
+
+struct AccountDetailView : View {
+    
+    @Bindable var account: Account
+    
+    var body: some View {
+        Text(account.name)
+        Image(systemName: "creditcard")
+        Text("acc details")
+    }
 }
 
 struct CreateAccountView : View {
