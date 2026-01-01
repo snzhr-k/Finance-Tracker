@@ -7,73 +7,33 @@ struct AccountView: View {
     @Query private var accounts: [Account]
     @State var presentSheet: Bool = false
     @State private var selectedAccount: Account?
+    @State private var accountToDelete: Account?
     
-    @ViewBuilder
-    private var detailView: some View {
-        if let account = selectedAccount {
-            AccountDetailView(account: account)
-        } else {
-            ContentUnavailableView(
-                "No Account Selected",
-                systemImage: "creditcard",
-                description: Text("Select an account from the sidebar")
-            )
-        }
-    }
     
     var body: some View {
-//        VStack{
-//            if accounts.isEmpty {
-//                Text("You don't have accounts yet") //TODO: add text styles
-//            }
-//            else {
-//                List{
-//                    ForEach(accounts) { acc in
-//                        Button{
-//                            print(acc.name)
-//                        } label: {
-//                            Text(acc.name)
-//                        }
-//                    }.onDelete(perform: deleteAccount)
-//                    
-//                    
-//                    Button{
-//                        presentSheet = true
-//                    } label: {
-//                        Image(systemName: "plus.circle")
-//                        Text("Create")
-//
-//                    }.buttonStyle(.borderedProminent)
-//                        .sheet(isPresented: $presentSheet, content: {
-//                            CreateAccountView(presentSheet: $presentSheet).frame(
-//                                minWidth: 500,
-//                                maxWidth: .infinity,
-//                                minHeight: 600,
-//                                maxHeight: .infinity
-//                            )
-//                        })
-//                }
-//            }
-//        }
-        
-        
-        
-        
-        
-        NavigationSplitView{
-            List{
-                ForEach(accounts) { acc in
-                    Button{
-                        print(acc.name)
-                        selectedAccount = acc
-                    } label: {
-                        Text(acc.name)
-                    }
+        NavigationSplitView {
+            List(selection: $selectedAccount){ /**sidebar with the list of all accounts**/
+                ForEach(accounts) { account in
+                    Text(account.name)
+                        .tag(account)
+                        .contextMenu {
+                            Button(role: .destructive){
+                                confirmDelete(account)
+                            } label: {
+                                Label("Delete Account", systemImage: "trash")
+                                
+                            }
+                        }
                 }.onDelete(perform: deleteAccount)
+                .onChange(of: accounts){
+                    if selectedAccount == nil {
+                        selectedAccount = accounts.first
+                    }
+                }
             }
             .navigationSplitViewColumnWidth(min: 180, ideal: 200)
             .toolbar{
-                ToolbarItem{
+                ToolbarItem(placement: .primaryAction){
                     Button{
                         presentSheet = true
                     } label: {
@@ -88,7 +48,9 @@ struct AccountView: View {
                                 minHeight: 600,
                                 maxHeight: .infinity)})
                 }
-        }
+                
+                
+            }
         } detail: {
             if let account = selectedAccount {
                 AccountDetailView(account: account)
@@ -99,6 +61,29 @@ struct AccountView: View {
                     description: Text("Select an account from the sidebar")
                 )
             }
+        }.confirmationDialog(
+            "Delete Account?",
+            isPresented: Binding(
+                get: { accountToDelete != nil },
+                set: { if !$0 { accountToDelete = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("Delete Account", role: .destructive) {
+                if let account = accountToDelete {
+                    if selectedAccount == account {
+                        selectedAccount = nil
+                    }
+                    modelContext.delete(account)
+                    accountToDelete = nil
+                }
+            }
+
+            Button("Cancel", role: .cancel) {
+                accountToDelete = nil
+            }
+        } message: {
+            Text("This will permanently delete the account and all its operations.")
         }
     }
     
@@ -109,16 +94,55 @@ struct AccountView: View {
         }
     }
     
+    func confirmDelete(_ account: Account){
+        accountToDelete = account
+    }
+    
 }
 
 struct AccountDetailView : View {
     
     @Bindable var account: Account
-    
+
     var body: some View {
-        Text(account.name)
-        Image(systemName: "creditcard")
-        Text("acc details")
+        VStack(alignment: .leading, spacing: 16) {
+
+            Text(account.name)
+                .font(.largeTitle)
+                .bold()
+
+            Text(
+                account.currentAmount,
+                format: .currency(code: account.currencyCode)
+            )
+            .font(.title2)
+
+            Divider()
+
+            List {
+                ForEach(account.operations) { operation in
+                    HStack {
+                        Text(operation.date, style: .date)
+                        Spacer()
+                        Text(
+                            operation.amount,
+                            format: .currency(code: account.currencyCode)
+                        )
+                        .foregroundStyle(operationAmountColor(operation))
+                    }
+                }
+            }
+        }
+        .padding()
+    }
+
+    private func operationAmountColor(_ operation: Operation) -> Color {
+        switch operation.type {
+        case .income:
+            return .green
+        case .expense:
+            return .red
+        }
     }
 }
 
@@ -144,7 +168,9 @@ struct CreateAccountView : View {
         else if (currentAmount < 0) {return "Invalid amount of initial deposit"}
         else {return nil}
     }
-    var isFormValid: Bool { return (errorMessage?.isEmpty) != nil}
+    var isFormValid: Bool {
+        !accountName.isEmpty && currentAmount >= 0
+    }
     
     @State var didEditName: Bool = false
     @State var didEditAmount: Bool = false
@@ -171,7 +197,9 @@ struct CreateAccountView : View {
             } header: {
                 Text("Initial Deposit")
             } footer: { //TODO: fix it to show only when the input data is invalid
-                Text("Invalid amount").foregroundStyle(.red)
+                if currentAmount < 0 {
+                    Text("Invalid amount").foregroundStyle(.red)
+                }
             }
            
             Section{
