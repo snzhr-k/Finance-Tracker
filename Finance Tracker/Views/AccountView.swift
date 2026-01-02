@@ -2,6 +2,69 @@ import SwiftData
 import Foundation
 import SwiftUI
 
+struct AccountSidebarView : View {
+    @Query private var accounts : [Account]
+    @Binding var selectedAccount : Account?
+    
+    let onCreate: () -> Void
+    let onDeleteRequest: (Account) -> Void
+    
+    var body: some View {
+        List(selection: $selectedAccount){ /**sidebar with the list of all accounts**/
+            ForEach(accounts) { account in
+                Text(account.name)
+                    .tag(account)
+                    .contextMenu {
+                        Button(role: .destructive){
+                            onDeleteRequest(account)
+                        } label: {
+                            Label("Delete account", systemImage: "trash")
+                            
+                        }
+                    }
+            }
+            .onDelete{ indexSet in
+                indexSet
+                    .map {accounts[$0]}
+                    .forEach(onDeleteRequest)
+                
+            }
+            .onChange(of: accounts){
+                if selectedAccount == nil {
+                    selectedAccount = accounts.first
+                }
+            }
+        }
+        .navigationSplitViewColumnWidth(min: 180, ideal: 200)
+        .toolbar{
+            ToolbarItem(placement: .primaryAction){
+                Button{
+                    onCreate()
+                } label: {
+                    Image(systemName: "plus.circle")
+                }
+            }
+        }
+    }
+}
+
+struct AccountDetailView : View {
+    let account: Account?
+    
+    var body : some View {
+        if let account {
+            AccountContentView(account: account)
+        } else {
+            ContentUnavailableView(
+                "No Account Selected",
+                systemImage: "creditcard"
+            )
+        }
+    }
+}
+
+
+
 struct AccountView: View {
     @Environment(\.modelContext) private var modelContext
     @Query private var accounts: [Account]
@@ -12,45 +75,11 @@ struct AccountView: View {
     
     var body: some View {
         NavigationSplitView {
-            List(selection: $selectedAccount){ /**sidebar with the list of all accounts**/
-                ForEach(accounts) { account in
-                    Text(account.name)
-                        .tag(account)
-                        .contextMenu {
-                            Button(role: .destructive){
-                                confirmDelete(account)
-                            } label: {
-                                Label("Delete Account", systemImage: "trash")
-                                
-                            }
-                        }
-                }.onDelete(perform: deleteAccount)
-                .onChange(of: accounts){
-                    if selectedAccount == nil {
-                        selectedAccount = accounts.first
-                    }
-                }
-            }
-            .navigationSplitViewColumnWidth(min: 180, ideal: 200)
-            .toolbar{
-                ToolbarItem(placement: .primaryAction){
-                    Button{
-                        presentSheet = true
-                    } label: {
-                        Image(systemName: "plus.circle")
-                        //Text("Create") //NOTE: text of the buttons cannot be displayed in toolbar
-
-                    }.buttonStyle(.borderedProminent)
-                        .sheet(isPresented: $presentSheet, content: {
-                            CreateAccountView(presentSheet: $presentSheet).frame(
-                                minWidth: 500,
-                                maxWidth: .infinity,
-                                minHeight: 600,
-                                maxHeight: .infinity)})
-                }
-                
-                
-            }
+            AccountSidebarView(
+                selectedAccount: $selectedAccount,
+                onCreate: { presentSheet = true },
+                onDeleteRequest: { accountToDelete = $0 }
+            )
         } detail: {
             if let account = selectedAccount {
                 AccountDetailView(account: account)
@@ -61,7 +90,14 @@ struct AccountView: View {
                     description: Text("Select an account from the sidebar")
                 )
             }
-        }.confirmationDialog(
+        }
+        .sheet(isPresented: $presentSheet, content: {
+            CreateAccountView(presentSheet: $presentSheet).frame(
+                minWidth: 500,
+                maxWidth: .infinity,
+                minHeight: 600,
+                maxHeight: .infinity)})
+        .confirmationDialog(
             "Delete Account?",
             isPresented: Binding(
                 get: { accountToDelete != nil },
@@ -100,7 +136,7 @@ struct AccountView: View {
     
 }
 
-struct AccountDetailView : View {
+struct AccountContentView : View {
     
     @Bindable var account: Account
 
@@ -266,4 +302,5 @@ struct EmptyAccountView : View {
 #Preview{
     AccountView().modelContainer(for: Account.self, inMemory: true)
     //EmptyAccountView().frame(minWidth: 800, minHeight: 600)
+    //AccountSidebarView()
 }
