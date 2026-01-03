@@ -153,7 +153,9 @@ struct AccountContentView : View {
 
             Divider()
 
+            //create new operation
             Button{
+                selectedOperation = nil
                 presentOperationCreateSheet = true
             } label: {
                 Image(systemName: "circle.plus")
@@ -161,7 +163,8 @@ struct AccountContentView : View {
             }
             .padding()
             
-            List { /**list of all operations**/
+            /**list of all operations**/
+            List {
                 ForEach(account.operations) { operation in
                     HStack {
                         Text(operation.date, style: .date)
@@ -172,12 +175,48 @@ struct AccountContentView : View {
                         )
                         .foregroundStyle(operationAmountColor(operation))
                     }
+                    .contextMenu{
+                        Button(role: .destructive){
+                            operationToDelete = operation
+                        } label : {
+                            Label("Delete operation", systemImage: "trash")
+                        }
+                        
+                        Button("Edit") {
+                            selectedOperation = operation
+                            presentOperationCreateSheet = true
+                        }
+                    }
+                    
+                    
                 }
             }
             .sheet(isPresented: $presentOperationCreateSheet, content: {
-                CreateOperationView(presentCreateOperationSheet: $presentOperationCreateSheet, account: account)
-                    .frame(minWidth: 500, minHeight: 600)
+                
+                CreateOperationView(account: account, operationToEdit: selectedOperation)
+                .frame(minWidth: 500, minHeight: 600)
+                
             })
+            .confirmationDialog(
+                "Delete Operation?",
+                isPresented: Binding(
+                    get: { operationToDelete != nil },
+                    set: { if !$0 { operationToDelete = nil } }
+                )
+            ) {
+                Button("Delete", role: .destructive) {
+                    if let operation = operationToDelete {
+                        account.removeOperation(operation: operation)
+                        operationToDelete = nil
+                    }
+                }
+
+                Button("Cancel", role: .cancel) {
+                    operationToDelete = nil
+                }
+            } message: {
+                Text("This operation will be permanently deleted.")
+            }
             
             
             
@@ -288,7 +327,11 @@ struct CreateAccountView : View {
 }
 
 struct CreateOperationView : View {
-    @Environment(\.modelContext) private var modelContext
+    //@Environment(\.modelContext) private var modelContext
+    @Environment(\.dismiss) private var dismiss
+    
+    let account: Account
+    let operationToEdit: Operation?
     
     enum OperationKind : String, CaseIterable, Identifiable {
         case income
@@ -301,19 +344,36 @@ struct CreateOperationView : View {
     @State private var kind : OperationKind = .income
     @State private var incomeCategory : IncomeCategory = .undefined
     @State private var expenseCategory : ExpenseCategory = .undefined
-    
     @State private var date: Date = Date()
     
-    
-    @Binding var presentCreateOperationSheet: Bool
     var isFormValid: Bool {
         amount >= 0
     }
     
-    var account: Account
+    init (account: Account, operationToEdit: Operation? = nil) {
+        self.account = account
+        self.operationToEdit = operationToEdit
+
+        if let operation = operationToEdit {
+            _amount = State(initialValue: operation.amount)
+            _date = State(initialValue: operation.date)
+
+            switch operation.type {
+            case .income(let category):
+                _kind = State(initialValue: .income)
+                _incomeCategory = State(initialValue: category)
+
+            case .expense(let category):
+                _kind = State(initialValue: .expense)
+                _expenseCategory = State(initialValue: category)
+            }
+        }
+    }
+    
+    
     
     var body : some View {
-        Text("New Operation")
+        Text(operationToEdit == nil ? "New Operation" : "Edit Operation")
             .font(.largeTitle)
             .bold()
         
@@ -325,6 +385,7 @@ struct CreateOperationView : View {
                         .tag(kind)
                 }
             }
+            .disabled(operationToEdit != nil)
             .pickerStyle(.segmented)
             .padding()
             
@@ -366,7 +427,7 @@ struct CreateOperationView : View {
                 HStack{
                     //Cancel button
                     Button {
-                        presentCreateOperationSheet = false
+                        dismiss()
                     } label : {
                         Image(systemName: "xmark.circle")
                         Text("Cancel")
@@ -378,21 +439,31 @@ struct CreateOperationView : View {
             
                     //submit button
                     Button {
-                        
-                        print("operation created")
-                        if(isFormValid){
-                            let category: OperationCategory =
-                                kind == .income
-                                ? .income(incomeCategory)
-                                : .expense(expenseCategory)
-                            
-                            account.addOperation(date: date, amount: amount, type: category)
-                            presentCreateOperationSheet = false
+                        guard isFormValid else { return }
+
+                        let category: OperationCategory =
+                            kind == .income
+                            ? .income(incomeCategory)
+                            : .expense(expenseCategory)
+
+                        if let operation = operationToEdit {
+                            // ✏️ EDIT EXISTING
+                            operation.amount = amount
+                            operation.date = date
+                            operation.type = category
+                        } else {
+                            // ➕ CREATE NEW
+                            account.addOperation(
+                                date: date,
+                                amount: amount,
+                                type: category
+                            )
                         }
-                        
+
+                        dismiss()
                     } label: {
-                        Image(systemName: "plus.circle")
-                        Text("Create")
+                        Image(systemName: operationToEdit == nil ? "plus.circle" : "checkmark.circle")
+                        Text(operationToEdit == nil ? "Create" : "Save")
                     }
                     .buttonStyle(.bordered)
                     .foregroundColor(.green)
