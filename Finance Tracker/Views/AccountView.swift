@@ -123,13 +123,6 @@ struct AccountView: View {
         }
     }
     
-    func deleteAccount(_ indexSet: IndexSet){
-        for i in indexSet{
-            let account = accounts[i]
-            modelContext.delete(account)
-        }
-    }
-    
     func confirmDelete(_ account: Account){
         accountToDelete = account
     }
@@ -139,6 +132,11 @@ struct AccountView: View {
 struct AccountContentView : View {
     
     @Bindable var account: Account
+    
+    @State var selectedOperation: Operation?
+    @State var operationToDelete: Operation?
+    
+    @State var presentOperationCreateSheet: Bool = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -147,7 +145,7 @@ struct AccountContentView : View {
                 .font(.largeTitle)
                 .bold()
 
-            Text(
+            Text( /**current amount**/
                 account.currentAmount,
                 format: .currency(code: account.currencyCode)
             )
@@ -155,7 +153,15 @@ struct AccountContentView : View {
 
             Divider()
 
-            List {
+            Button{
+                presentOperationCreateSheet = true
+            } label: {
+                Image(systemName: "circle.plus")
+                Text("Add operation")
+            }
+            .padding()
+            
+            List { /**list of all operations**/
                 ForEach(account.operations) { operation in
                     HStack {
                         Text(operation.date, style: .date)
@@ -168,6 +174,14 @@ struct AccountContentView : View {
                     }
                 }
             }
+            .sheet(isPresented: $presentOperationCreateSheet, content: {
+                CreateOperationView(presentCreateOperationSheet: $presentOperationCreateSheet, account: account)
+                    .frame(minWidth: 500, minHeight: 600)
+            })
+            
+            
+            
+            
         }
         .padding()
     }
@@ -273,34 +287,125 @@ struct CreateAccountView : View {
     }
 }
 
-struct EmptyAccountView : View {
-    @State var presentSheet: Bool = false
+struct CreateOperationView : View {
+    @Environment(\.modelContext) private var modelContext
     
-    var body: some View {
-        VStack{
-            Text("You don't have accounts yet") //TODO: add text styles
+    enum OperationKind : String, CaseIterable, Identifiable {
+        case income
+        case expense
+        
+        var id: String {rawValue}
+    }
+    
+    @State private var amount: Decimal = 0.0
+    @State private var kind : OperationKind = .income
+    @State private var incomeCategory : IncomeCategory = .undefined
+    @State private var expenseCategory : ExpenseCategory = .undefined
+    
+    @State private var date: Date = Date()
+    
+    
+    @Binding var presentCreateOperationSheet: Bool
+    var isFormValid: Bool {
+        amount >= 0
+    }
+    
+    var account: Account
+    
+    var body : some View {
+        Text("New Operation")
+            .font(.largeTitle)
+            .bold()
+        
+        Form {
+            /**Picker for the operation kind (expense/income)**/
+            Picker ("Type", selection : $kind) {
+                ForEach(OperationKind.allCases) { kind in
+                    Text(kind.rawValue.capitalized)
+                        .tag(kind)
+                }
+            }
+            .pickerStyle(.segmented)
+            .padding()
             
-            Button{
-                presentSheet = true
-            } label: {
-                Image(systemName: "plus.circle")
-                Text("Create")
-
-            }.buttonStyle(.borderedProminent)
-                .sheet(isPresented: $presentSheet, content: {
-                    CreateAccountView(presentSheet: $presentSheet).frame(
-                        minWidth: 500,
-                        maxWidth: .infinity,
-                        minHeight: 600,
-                        maxHeight: .infinity
-                    )
-                })
+            /**picker of the income/expense category depending on the category**/
+            if kind == .income {
+                Picker("Category", selection: $incomeCategory){
+                    ForEach(IncomeCategory.allCases, id: \.self){
+                        Text($0.rawValue.capitalized)
+                    }
+                }
+                .padding()
+            } else {
+                Picker("Category", selection: $expenseCategory){
+                    ForEach(ExpenseCategory.allCases, id: \.self){
+                        Text($0.rawValue.capitalized)
+                    }
+                }
+                .padding()
+            }
+            
+            //date field
+            DatePicker(
+                "Date",
+                selection: $date,
+                displayedComponents: [.date]
+            )
+            .datePickerStyle(.graphical)
+            .padding()
+            
+            //amount field
+            TextField(
+                "Amount",
+                value: $amount,
+                format: .currency(code: account.currencyCode)
+            )
+            
+            /**cancel & submit buttons**/
+            Section{
+                HStack{
+                    //Cancel button
+                    Button {
+                        presentCreateOperationSheet = false
+                    } label : {
+                        Image(systemName: "xmark.circle")
+                        Text("Cancel")
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(.red)
+                    
+                    Spacer()
+            
+                    //submit button
+                    Button {
+                        
+                        print("operation created")
+                        if(isFormValid){
+                            let category: OperationCategory =
+                                kind == .income
+                                ? .income(incomeCategory)
+                                : .expense(expenseCategory)
+                            
+                            account.addOperation(date: date, amount: amount, type: category)
+                            presentCreateOperationSheet = false
+                        }
+                        
+                    } label: {
+                        Image(systemName: "plus.circle")
+                        Text("Create")
+                    }
+                    .buttonStyle(.bordered)
+                    .foregroundColor(.green)
+                    .disabled(!isFormValid)
+            
+                }
+                .padding()
+            }
+            
+            
+            
+            
         }
     }
-}
-
-#Preview{
-    AccountView().modelContainer(for: Account.self, inMemory: true)
-    //EmptyAccountView().frame(minWidth: 800, minHeight: 600)
-    //AccountSidebarView()
+    
 }
