@@ -12,7 +12,8 @@ struct AccountSidebarView : View {
     var body: some View {
         List(selection: $selectedAccount){ /**sidebar with the list of all accounts**/
             ForEach(accounts) { account in
-                Text(account.name)
+                //Text(account.name)
+                Label(account.name, systemImage: "creditcard")
                     .tag(account)
                     .contextMenu {
                         Button(role: .destructive){
@@ -129,6 +130,34 @@ struct AccountView: View {
     
 }
 
+struct OperationRowView : View {
+    let operation: Operation
+    let account: Account
+
+    var body: some View {
+        HStack {
+            Image(systemName: operation.icon)
+                .foregroundStyle(operation.color)
+                .frame(width: 24)
+
+            VStack(alignment: .leading) {
+                Text(operation.categoryDisplayName)
+                    .font(.headline)
+
+                Text(operation.date, style: .date)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+
+            Text(operation.amount, format: .currency(code: account.currencyCode))
+                .foregroundStyle(operation.color)
+        }
+        .padding(.vertical, 4)
+    }
+}
+
 struct AccountContentView : View {
     
     @Bindable var account: Account
@@ -141,15 +170,19 @@ struct AccountContentView : View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
 
-            Text(account.name)
-                .font(.largeTitle)
-                .bold()
+            HStack {
+                VStack(alignment: .leading) {
+                    Text(account.name)
+                        .font(.largeTitle)
+                        .bold()
 
-            Text( /**current amount**/
-                account.currentAmount,
-                format: .currency(code: account.currencyCode)
-            )
-            .font(.title2)
+                    Text(account.currentAmount, format: .currency(code: account.currencyCode))
+                        .font(.title3)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer()
+            }
 
             Divider()
 
@@ -161,20 +194,15 @@ struct AccountContentView : View {
                 Image(systemName: "circle.plus")
                 Text("Add operation")
             }
+            .keyboardShortcut("n", modifiers: [.command])
+            .buttonStyle(.borderedProminent)
+            .tint(.green)
             .padding()
             
             /**list of all operations**/
             List {
-                ForEach(account.operations) { operation in
-                    HStack {
-                        Text(operation.date, style: .date)
-                        Spacer()
-                        Text(
-                            operation.amount,
-                            format: .currency(code: account.currencyCode)
-                        )
-                        .foregroundStyle(operationAmountColor(operation))
-                    }
+                ForEach(account.operations.sorted(by: {$0.date > $1.date})) { operation in
+                    OperationRowView(operation: operation, account: account)
                     .contextMenu{
                         Button(role: .destructive){
                             operationToDelete = operation
@@ -205,9 +233,11 @@ struct AccountContentView : View {
                 )
             ) {
                 Button("Delete", role: .destructive) {
-                    if let operation = operationToDelete {
-                        account.removeOperation(operation: operation)
-                        operationToDelete = nil
+                    withAnimation{
+                        if let operation = operationToDelete {
+                            account.removeOperation(operation: operation)
+                            operationToDelete = nil
+                        }
                     }
                 }
 
@@ -232,6 +262,13 @@ struct AccountContentView : View {
         case .expense:
             return .red
         }
+    }
+    
+    @ViewBuilder
+    private func operationIcon(_ operation: Operation) -> some View {
+        Image(systemName: operation.icon)
+            .foregroundStyle(operation.color)
+            .frame(width: 24)
     }
 }
 
@@ -446,25 +483,30 @@ struct CreateOperationView : View {
                             ? .income(incomeCategory)
                             : .expense(expenseCategory)
 
-                        if let operation = operationToEdit {
-                            // ✏️ EDIT EXISTING
-                            operation.amount = amount
-                            operation.date = date
-                            operation.type = category
-                        } else {
-                            // ➕ CREATE NEW
-                            account.addOperation(
-                                date: date,
-                                amount: amount,
-                                type: category
-                            )
+                        
+                        
+                        withAnimation{
+                            if let operation = operationToEdit {
+                                operation.amount = amount
+                                operation.date = date
+                                operation.type = category
+                            } else {
+                                account.addOperation(
+                                    date: date,
+                                    amount: amount,
+                                    type: category
+                                )
+                            }
                         }
-
                         dismiss()
+                        
+                        
+                
                     } label: {
                         Image(systemName: operationToEdit == nil ? "plus.circle" : "checkmark.circle")
                         Text(operationToEdit == nil ? "Create" : "Save")
                     }
+                    .keyboardShortcut(.return, modifiers: [])
                     .buttonStyle(.bordered)
                     .foregroundColor(.green)
                     .disabled(!isFormValid)
