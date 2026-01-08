@@ -1,14 +1,17 @@
 import Foundation
 import SwiftData
 
+
+//shortly speaking it is a mini account
 @Model
 class SavingGoal : Identifiable {
-    let id: UUID
+    let id: UUID //might be not necessary
+    
     var name: String
     var targetAmount: Decimal
-    @Relationship var operations: [Operation]
+    @Relationship var savingOperations: [Operation]
     var currentAmount: Decimal {
-        return operations.reduce(0){ result, operation in
+        return savingOperations.reduce(0){ result, operation in
             switch operation.type {
             case .income (let incomeCategory):
                 return result + operation.amount
@@ -27,11 +30,10 @@ class SavingGoal : Identifiable {
             .doubleValue)
     }
     
-    init(id: UUID, name: String, targetAmount: Decimal) {
+    init(id: UUID, name: String, targetAmount: Decimal, initialDeposit: Decimal = 0.0) {
         self.id = id
         self.name = name
         self.targetAmount = targetAmount
-        self.operations = []
-        
+        self.savingOperations = []        
     }
 }

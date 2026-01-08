@@ -60,6 +60,7 @@ class Operation {
     var id: UUID
     var date: Date
     var amount: Decimal
+    
     var type: OperationCategory
     
     var categoryDisplayName: String {
