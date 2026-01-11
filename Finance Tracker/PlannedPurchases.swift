@@ -1,6 +1,7 @@
 import Foundation
 import SwiftData
 
+
 @Model
 class PlannedPurchase : Identifiable{
     var category: ExpenseCategory
@@ -13,3 +14,4 @@ class PlannedPurchase : Identifiable{
         self.name = name
     }
 }
+

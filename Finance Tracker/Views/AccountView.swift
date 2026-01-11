@@ -161,99 +161,112 @@ struct OperationRowView : View {
 struct AccountContentView : View {
     
     @Bindable var account: Account
-    
-    @State var selectedOperation: Operation?
-    @State var operationToDelete: Operation?
-    
-    @State var presentOperationCreateSheet: Bool = false
+        @Environment(\.modelContext) private var modelContext  // For insertions
+        
+        @State var selectedOperation: Operation?
+        @State var operationToDelete: Operation?
+        @State var presentOperationCreateSheet: Bool = false
+        @State var presentGoalCreateSheet: Bool = false  // New for goals
+        
+        @State var selectedGoal: SavingGoal?  // For navigation to detail
 
-    var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-
-            HStack {
-                VStack(alignment: .leading) {
-                    Text(account.name)
-                        .font(.largeTitle)
-                        .bold()
-
-                    Text(account.currentAmount, format: .currency(code: account.currencyCode))
-                        .font(.title3)
-                        .foregroundStyle(.secondary)
-                }
-
-                Spacer()
-            }
-
-            Divider()
-
-            //create new operation
-            Button{
-                selectedOperation = nil
-                presentOperationCreateSheet = true
-            } label: {
-                Image(systemName: "circle.plus")
-                Text("Add operation")
-            }
-            .keyboardShortcut("n", modifiers: [.command])
-            .buttonStyle(.borderedProminent)
-            .tint(.green)
-            .padding()
-            
-            /**list of all operations**/
-            List {
-                ForEach(account.operations.sorted(by: {$0.date > $1.date})) { operation in
-                    OperationRowView(operation: operation, account: account)
-                    .contextMenu{
-                        Button(role: .destructive){
-                            operationToDelete = operation
-                        } label : {
-                            Label("Delete operation", systemImage: "trash")
+        var body: some View {
+            NavigationStack {  // Enables NavigationLink to detail
+                TabView {
+                    // Tab 1: Operations (existing content)
+                    VStack(alignment: .leading, spacing: 16) {
+                        HStack {
+                            VStack(alignment: .leading) {
+                                Text(account.name)
+                                    .font(.largeTitle)
+                                    .bold()
+                                
+                                Text(account.currentAmount, format: .currency(code: account.currencyCode))
+                                    .font(.title3)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
                         }
                         
-                        Button("Edit") {
-                            selectedOperation = operation
+                        Divider()
+                        
+                        // Create new operation
+                        Button {
+                            selectedOperation = nil
                             presentOperationCreateSheet = true
+                        } label: {
+                            Image(systemName: "circle.plus")
+                            Text("Add operation")
+                        }
+                        .keyboardShortcut("n", modifiers: [.command])
+                        .buttonStyle(.borderedProminent)
+                        .tint(.green)
+                        .padding()
+                        
+                        /** List of all operations **/
+                        List {
+                            ForEach(account.operations.sorted(by: { $0.date > $1.date })) { operation in
+                                OperationRowView(operation: operation, account: account)
+                                    .contextMenu {
+                                        Button(role: .destructive) {
+                                            operationToDelete = operation
+                                        } label: {
+                                            Label("Delete operation", systemImage: "trash")
+                                        }
+                                        
+                                        Button("Edit") {
+                                            selectedOperation = operation
+                                            presentOperationCreateSheet = true
+                                        }
+                                    }
+                            }
                         }
                     }
+                    .tabItem {
+                        Label("Operations", systemImage: "list.bullet")
+                    }
                     
-                    
+                    // Tab 2: Saving Goals
+                    VStack {
+                        if account.savingGoals.isEmpty {
+                            ContentUnavailableView(
+                                "No Saving Goals",
+                                systemImage: "target",
+                                description: Text("Create a new saving goal to start tracking your progress.")
+                            )
+                        } else {
+                            List(selection: $selectedGoal) {  // Enables selection/navigation
+                                ForEach(account.savingGoals) { goal in
+                                    NavigationLink(destination: SavingGoalDetailView(goal: goal, account: account)) {
+                                        SavingGoalRowView(goal: goal, currencyCode: account.currencyCode)
+                                    }
+                                    .tag(goal)
+                                }
+                            }
+                        }
+                    }
+                    .tabItem {
+                        Label("Saving Goals", systemImage: "target")
+                    }
+                    .toolbar {
+                        ToolbarItem(placement: .primaryAction) {
+                            Button {
+                                presentGoalCreateSheet = true
+                            } label: {
+                                Image(systemName: "plus.circle")
+                            }
+                        }
+                    }
                 }
             }
-            .sheet(isPresented: $presentOperationCreateSheet, content: {
-                
+            .sheet(isPresented: $presentOperationCreateSheet) {
                 CreateOperationView(account: account, operationToEdit: selectedOperation)
-                .frame(minWidth: 500, minHeight: 600)
-                
-            })
-            .confirmationDialog(
-                "Delete Operation?",
-                isPresented: Binding(
-                    get: { operationToDelete != nil },
-                    set: { if !$0 { operationToDelete = nil } }
-                )
-            ) {
-                Button("Delete", role: .destructive) {
-                    withAnimation{
-                        if let operation = operationToDelete {
-                            account.removeOperation(operation: operation)
-                            operationToDelete = nil
-                        }
-                    }
-                }
-
-                Button("Cancel", role: .cancel) {
-                    operationToDelete = nil
-                }
-            } message: {
-                Text("This operation will be permanently deleted.")
             }
-            
-            
-            
-            
+            .sheet(isPresented: $presentGoalCreateSheet) {
+                CreateSavingGoalView(account: account)  // Pass account
+            }
+            // Add confirmation for op delete if needed (your existing logic)
         }
-        .padding()
-    }
 
     private func operationAmountColor(_ operation: Operation) -> Color {
         switch operation.type {
@@ -342,7 +355,6 @@ struct CreateAccountView : View {
                     Spacer()
                     
                     Button {
-                        //if(validateAccountCreation(accountName, transfer: currentAmount)){ //TODO: use computed property instead of calling function every time
                         if (isFormValid){
                             let newAccount: Account = Account(name: accountName, currencyCode: currencyCode, initialDeposit: currentAmount)
                             modelContext.insert(newAccount)
@@ -355,7 +367,6 @@ struct CreateAccountView : View {
                     .buttonStyle(.bordered)
                     .foregroundColor(.green)
                     .disabled(!isFormValid)
-                    //.disabled(!validateAccountCreation(accountName, transfer: currentAmount)) //TODO: use computed property instead of calling function every time
                 }.padding()
             }
         }.formStyle(.grouped)
@@ -364,7 +375,6 @@ struct CreateAccountView : View {
 }
 
 struct CreateOperationView : View {
-    //@Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
     
     let account: Account
