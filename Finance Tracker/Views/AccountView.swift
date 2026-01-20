@@ -2,63 +2,59 @@ import SwiftData
 import Foundation
 import SwiftUI
 
-struct AccountSidebarView : View {
-    @Query private var accounts : [Account]
-    @Binding var selectedAccount : Account?
-    
+// MARK: - Sidebar
+
+struct AccountSidebarView: View {
+    let accounts: [Account]
+    @Binding var selectedAccount: Account?
+
     let onCreate: () -> Void
     let onDeleteRequest: (Account) -> Void
-    
+
     var body: some View {
-        List(selection: $selectedAccount){ /**sidebar with the list of all accounts**/
+        List(selection: $selectedAccount) {
             ForEach(accounts) { account in
-                //Text(account.name)
                 Label(account.name, systemImage: "creditcard")
+                    .contentShape(Rectangle())
                     .tag(account)
                     .contextMenu {
-                        Button(role: .destructive){
+                        Button(role: .destructive) {
                             onDeleteRequest(account)
                         } label: {
-                            Label("Delete account", systemImage: "trash")
-                            
+                            Label("Delete Account", systemImage: "trash")
                         }
                     }
             }
-            .onDelete{ indexSet in
-                indexSet
-                    .map {accounts[$0]}
-                    .forEach(onDeleteRequest)
-                
-            }
-            .onChange(of: accounts){
-                if selectedAccount == nil {
-                    selectedAccount = accounts.first
+        }
+        .navigationTitle("Accounts")
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button(action: onCreate) {
+                    Image(systemName: "plus.circle")
                 }
             }
         }
-        .navigationSplitViewColumnWidth(min: 180, ideal: 200)
-        .toolbar{
-            ToolbarItem(placement: .primaryAction){
-                Button{
-                    onCreate()
-                } label: {
-                    Image(systemName: "plus.circle")
-                }
+        .onChange(of: accounts) {
+            if selectedAccount == nil {
+                selectedAccount = accounts.first
             }
         }
     }
 }
 
-struct AccountDetailView : View {
+// MARK: - Detail Wrapper
+
+struct AccountDetailView: View {
     let account: Account?
-    
-    var body : some View {
+
+    var body: some View {
         if let account {
             AccountContentView(account: account)
         } else {
             ContentUnavailableView(
                 "No Account Selected",
-                systemImage: "creditcard"
+                systemImage: "creditcard",
+                description: Text("Select an account from the sidebar")
             )
         }
     }
@@ -66,38 +62,31 @@ struct AccountDetailView : View {
 
 
 
+// MARK: - AccountView (Root)
+
 struct AccountView: View {
     @Environment(\.modelContext) private var modelContext
     @Query private var accounts: [Account]
-    @State var presentSheet: Bool = false
+
     @State private var selectedAccount: Account?
     @State private var accountToDelete: Account?
-    
-    
+    @State private var showCreateAccount = false
+
     var body: some View {
         NavigationSplitView {
             AccountSidebarView(
+                accounts: accounts,
                 selectedAccount: $selectedAccount,
-                onCreate: { presentSheet = true },
+                onCreate: { showCreateAccount = true },
                 onDeleteRequest: { accountToDelete = $0 }
             )
         } detail: {
-            if let account = selectedAccount {
-                AccountDetailView(account: account)
-            } else {
-                ContentUnavailableView(
-                    "No Account Selected",
-                    systemImage: "creditcard",
-                    description: Text("Select an account from the sidebar")
-                )
-            }
+            AccountDetailView(account: selectedAccount)
         }
-        .sheet(isPresented: $presentSheet, content: {
-            CreateAccountView(presentSheet: $presentSheet).frame(
-                minWidth: 500,
-                maxWidth: .infinity,
-                minHeight: 600,
-                maxHeight: .infinity)})
+        .sheet(isPresented: $showCreateAccount) {
+            CreateAccountView(presentSheet: $showCreateAccount)
+                .frame(minWidth: 500, minHeight: 600)
+        }
         .confirmationDialog(
             "Delete Account?",
             isPresented: Binding(
@@ -112,23 +101,54 @@ struct AccountView: View {
                         selectedAccount = nil
                     }
                     modelContext.delete(account)
-                    accountToDelete = nil
                 }
+                accountToDelete = nil
             }
-
             Button("Cancel", role: .cancel) {
                 accountToDelete = nil
             }
-        } message: {
-            Text("This will permanently delete the account and all its operations.")
         }
     }
-    
-    func confirmDelete(_ account: Account){
-        accountToDelete = account
-    }
-    
 }
+
+
+
+
+// MARK: - Operations Tab
+
+struct OperationsTab: View {
+    let account: Account
+    let onAdd: () -> Void
+    let onEdit: (Operation) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            header
+            Divider()
+            List {
+                ForEach(account.operations.sorted { $0.date > $1.date }) { operation in
+                    OperationRowView(operation: operation, account: account)
+                        .contextMenu {
+                            Button("Edit") { onEdit(operation) }
+                        }
+                }
+            }
+        }
+        .padding()
+    }
+
+    private var header: some View {
+        VStack(alignment: .leading) {
+            Text(account.name)
+                .font(.largeTitle)
+                .bold()
+            Text(account.currentAmount, format: .currency(code: account.currencyCode))
+                .foregroundStyle(.secondary)
+        }
+    }
+}
+
+
 
 struct OperationRowView : View {
     let operation: Operation
@@ -158,130 +178,68 @@ struct OperationRowView : View {
     }
 }
 
-struct AccountContentView : View {
-    
-    @Bindable var account: Account
-        @Environment(\.modelContext) private var modelContext  // For insertions
-        
-        @State var selectedOperation: Operation?
-        @State var operationToDelete: Operation?
-        @State var presentOperationCreateSheet: Bool = false
-        @State var presentGoalCreateSheet: Bool = false  // New for goals
-        
-        @State var selectedGoal: SavingGoal?  // For navigation to detail
+// MARK: - Account Content
 
-        var body: some View {
-            NavigationStack {  // Enables NavigationLink to detail
-                TabView {
-                    // Tab 1: Operations (existing content)
-                    VStack(alignment: .leading, spacing: 16) {
-                        HStack {
-                            VStack(alignment: .leading) {
-                                Text(account.name)
-                                    .font(.largeTitle)
-                                    .bold()
-                                
-                                Text(account.currentAmount, format: .currency(code: account.currencyCode))
-                                    .font(.title3)
-                                    .foregroundStyle(.secondary)
-                            }
-                            Spacer()
-                        }
-                        
-                        Divider()
-                        
-                        // Create new operation
-                        Button {
+struct AccountContentView: View {
+    @Bindable var account: Account
+
+    @State private var selectedTab: Tab = .operations
+    @State private var selectedOperation: Operation?
+    @State private var showOperationSheet = false
+    @State private var showGoalSheet = false
+
+    enum Tab {
+        case operations
+        case goals
+    }
+
+    var body: some View {
+        NavigationStack {
+            TabView(selection: $selectedTab) {
+                OperationsTab(
+                    account: account,
+                    onAdd: {
+                        selectedOperation = nil
+                        showOperationSheet = true
+                    },
+                    onEdit: {
+                        selectedOperation = $0
+                        showOperationSheet = true
+                    }
+                )
+                .tabItem { Label("Operations", systemImage: "list.bullet") }
+                .tag(Tab.operations)
+
+                GoalsTab(account: account)
+                    .tabItem { Label("Saving Goals", systemImage: "target") }
+                    .tag(Tab.goals)
+            }
+            .navigationTitle(account.name)
+            .toolbar {
+                ToolbarItem(placement: .primaryAction) {
+                    Button {
+                        switch selectedTab {
+                        case .operations:
                             selectedOperation = nil
-                            presentOperationCreateSheet = true
-                        } label: {
-                            Image(systemName: "circle.plus")
-                            Text("Add operation")
+                            showOperationSheet = true
+                        case .goals:
+                            showGoalSheet = true
                         }
-                        .keyboardShortcut("n", modifiers: [.command])
-                        .buttonStyle(.borderedProminent)
-                        .tint(.green)
-                        .padding()
-                        
-                        /** List of all operations **/
-                        List {
-                            ForEach(account.operations.sorted(by: { $0.date > $1.date })) { operation in
-                                OperationRowView(operation: operation, account: account)
-                                    .contextMenu {
-                                        Button(role: .destructive) {
-                                            operationToDelete = operation
-                                        } label: {
-                                            Label("Delete operation", systemImage: "trash")
-                                        }
-                                        
-                                        Button("Edit") {
-                                            selectedOperation = operation
-                                            presentOperationCreateSheet = true
-                                        }
-                                    }
-                            }
-                        }
-                    }
-                    .tabItem {
-                        Label("Operations", systemImage: "list.bullet")
-                    }
-                    
-                    // Tab 2: Saving Goals
-                    VStack {
-                        if account.savingGoals.isEmpty {
-                            ContentUnavailableView(
-                                "No Saving Goals",
-                                systemImage: "target",
-                                description: Text("Create a new saving goal to start tracking your progress.")
-                            )
-                        } else {
-                            List(selection: $selectedGoal) {  // Enables selection/navigation
-                                ForEach(account.savingGoals) { goal in
-                                    NavigationLink(destination: SavingGoalDetailView(goal: goal, account: account)) {
-                                        SavingGoalRowView(goal: goal, currencyCode: account.currencyCode)
-                                    }
-                                    .tag(goal)
-                                }
-                            }
-                        }
-                    }
-                    .tabItem {
-                        Label("Saving Goals", systemImage: "target")
-                    }
-                    .toolbar {
-                        ToolbarItem(placement: .primaryAction) {
-                            Button {
-                                presentGoalCreateSheet = true
-                            } label: {
-                                Image(systemName: "plus.circle")
-                            }
-                        }
+                    } label: {
+                        Image(systemName: "plus.circle")
                     }
                 }
             }
-            .sheet(isPresented: $presentOperationCreateSheet) {
-                CreateOperationView(account: account, operationToEdit: selectedOperation)
-            }
-            .sheet(isPresented: $presentGoalCreateSheet) {
-                CreateSavingGoalView(account: account)  // Pass account
-            }
-            // Add confirmation for op delete if needed (your existing logic)
         }
-
-    private func operationAmountColor(_ operation: Operation) -> Color {
-        switch operation.type {
-        case .income:
-            return .green
-        case .expense:
-            return .red
+        .sheet(isPresented: $showOperationSheet) {
+            CreateOperationView(
+                account: account,
+                operationToEdit: selectedOperation
+            )
         }
-    }
-    
-    @ViewBuilder
-    private func operationIcon(_ operation: Operation) -> some View {
-        Image(systemName: operation.icon)
-            .foregroundStyle(operation.color)
-            .frame(width: 24)
+        .sheet(isPresented: $showGoalSheet) {
+            CreateSavingGoalView(account: account)
+        }
     }
 }
 
